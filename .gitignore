@@ -16,7 +16,12 @@ samples/
 test_*.pdf
 output.pdf
 check_*.png
+preview/
+preview_*.png
 *.zip
+
+# WorkBuddy workspace memory
+.workbuddy/
 
 # easyofd fallback temp directories (should not appear after v0.1.0)
 *_*/

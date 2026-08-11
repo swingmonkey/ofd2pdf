@@ -1,9 +1,7 @@
 """Basic tests for converter registry and easyofd backend."""
 
-import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -21,15 +19,15 @@ def test_easyofd_is_available():
     assert EasyOFDBackend.is_available() is True
 
 
-def test_taurusxin_not_available_without_exe():
-    with patch.dict(os.environ, {}, clear=True):
-        # Ensure no bin/Ofd2Pdf.exe exists during this test
-        assert TaurusxinBackend.is_available() is False
+def test_taurusxin_not_available_without_exe(monkeypatch):
+    monkeypatch.delenv("OFD2PDF_TAURUSXIN_EXE", raising=False)
+    # Ensure no bin/Ofd2Pdf.exe exists during this test
+    assert TaurusxinBackend.is_available() is False
 
 
-def test_ofdrw_not_available_without_jar():
-    with patch.dict(os.environ, {}, clear=True):
-        assert OFDRWBackend.is_available() is False
+def test_ofdrw_not_available_without_jar(monkeypatch):
+    monkeypatch.delenv("OFD2PDF_OFDRW_JAR", raising=False)
+    assert OFDRWBackend.is_available() is False
 
 
 def test_list_backends():
