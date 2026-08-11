@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+*.whl
+
+# Test / sample files
+*.ofd
+*. OFD
+sample/
+samples/
+test_*.pdf
+output.pdf
+check_*.png
+*.zip
+
+# easyofd fallback temp directories (should not appear after v0.1.0)
+*_*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloaded binaries
+bin/Ofd2Pdf*.exe
+bin/ofdrw*.jar

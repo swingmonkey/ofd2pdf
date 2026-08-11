@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ofd2pdf"
+version = "0.1.0"
+description = "OFD (GB/T 33190) to PDF converter with pluggable backends"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "廖总", email = "airtraffic.site@example.com"}
+]
+keywords = ["ofd", "pdf", "converter", "gb33190", "电子发票", "公文"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "easyofd>=20260427",
+    "pymupdf>=1.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+ofd2pdf = "ofd2pdf.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ofd2pdf*"]
+
+[tool.ruff]
+line-length = 120
