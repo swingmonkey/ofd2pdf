@@ -77,6 +77,43 @@ from ofd2pdf.converter import convert_file
 convert_file("input.ofd", "output.pdf", backend="easyofd")
 ```
 
+## 打包为 Windows EXE（图形界面）
+
+仓库内置了一个 tkinter 图形界面（`ofd2pdf/gui.py`）和 PyInstaller 打包配置
+（`ofd2pdf.spec`），可打包出双击即用的独立 exe：
+
+```bat
+:: 一键打包（自动安装依赖并调用 PyInstaller）
+build_exe.bat
+```
+
+或手动：
+
+```bash
+# 1. 安装依赖（需 64 位 Python 3.9+）
+py -3.13 -m pip install easyofd pymupdf pyinstaller
+
+# 2. 打包
+py -3.13 -m PyInstaller ofd2pdf.spec --noconfirm
+```
+
+产物为 `dist\OFD转PDF工具.exe`。
+
+用法：
+
+- **双击运行**：打开图形界面，选择 OFD 文件或目录、选择输出位置、选择后端后点「开始转换」。
+- **命令行调用**：同一个 exe 也支持传参，等价于 `ofd2pdf` CLI（便于脚本批量调用）：
+
+  ```bat
+  OFD转PDF工具.exe 输入.ofd -o 输出.pdf
+  OFD转PDF工具.exe D:\incoming\ -o D:\pdf\ --batch
+  ```
+
+> **重要**：`.spec` 里显式收集了 `pymupdf` 的动态库（`_mupdf.pyd` +
+> `mupdfcpp64.dll`）。`easyofd` 内部会 `import fitz`，若打包时漏掉这些二进制
+> 依赖，exe 会在启动/转换时崩溃（这就是之前「打包不完整」的根因）。
+> 请勿用 `--exclude-module pymupdf` 之类的参数精简。
+
 ## 实测效果
 
 用仓库同目录下的测试文件（民航局 1353 号 2026 年 6 月份航班正常考核指标通报，20 页 WPS 生成 OFD）验证：
@@ -98,9 +135,12 @@ ofd2pdf/
 ├── ofd2pdf/              # 主包
 │   ├── backends/         # 转换后端
 │   ├── cli.py            # 命令行入口
-│   └── converter.py      # 统一 API
+│   ├── converter.py      # 统一 API
+│   └── gui.py            # tkinter 图形界面（打包 EXE 入口）
 ├── scripts/              # 后端安装脚本
 ├── tests/                # 测试
+├── ofd2pdf.spec          # PyInstaller 打包配置
+├── build_exe.bat         # 一键打包脚本（Windows）
 ├── README.md
 └── pyproject.toml
 ```
