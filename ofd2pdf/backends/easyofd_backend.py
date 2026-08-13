@@ -145,7 +145,11 @@ def _patch_easyofd_path_ctm() -> None:
         logger.debug("Could not load easyofd for path CTM patch: %s", exc)
         return
 
-    # (a) parser: keep the PathObject CTM in each line entry
+    # (a) parser: keep the PathObject CTM in each line entry, and restore
+    # leading spaces that xmltodict (strip_whitespace=True) removed from
+    # TextCode text. WPS uses leading spaces for indentation; without them
+    # the character count no longer matches DeltaX and glyphs are drawn on
+    # the wrong advance (overlapping text).
     _original_content_call = ContentFileParser.__call__
 
     def _call_with_ctm(self):
@@ -154,6 +158,15 @@ def _patch_easyofd_path_ctm() -> None:
             ctm_map = _collect_path_ctm(self.xml_obj)
             for line in result.get("line_list", []):
                 line["CTM"] = ctm_map.get(str(line.get("ID")), "")
+            for t in result.get("text_list", []):
+                text = t.get("text", "")
+                dx = t.get("DeltaX", "")
+                dy = t.get("DeltaY", "")
+                n_adv = len(dx.split()) if dx else 0
+                if not n_adv and dy:
+                    n_adv = len(dy.split())
+                if n_adv and len(text) < n_adv + 1:
+                    t["text"] = " " * (n_adv + 1 - len(text)) + text
         except Exception as exc:  # pragma: no cover
             logger.debug("line CTM collection failed: %s", exc)
         return result
