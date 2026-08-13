@@ -3,6 +3,13 @@
 Run directly with ``python -m ofd2pdf.gui``, or package into a standalone
 Windows executable with the PyInstaller spec in the repository root
 (see README "打包为 Windows EXE").
+
+Features
+--------
+- Drag & drop OFD files or folders onto the window (needs ``tkinterdnd2``).
+- Single-file / directory / multi-file batch conversion.
+- By default each OFD is saved as ``<同名>.pdf`` next to the source OFD.
+- Passing command-line arguments delegates to the console CLI (headless mode).
 """
 
 from __future__ import annotations
@@ -25,6 +32,12 @@ if sys.stderr is None:
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
+try:  # optional: drag & drop support
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except Exception:  # pragma: no cover - tkinterdnd2 not installed
+    DND_FILES = None
+    TkinterDnD = None
+
 from ofd2pdf import __version__
 from ofd2pdf.converter import convert_file, list_backends
 
@@ -35,8 +48,8 @@ class Ofd2PdfApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         root.title(f"OFD 转 PDF 工具  v{__version__}")
-        root.geometry("760x560")
-        root.minsize(640, 480)
+        root.geometry("760x600")
+        root.minsize(640, 500)
 
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
@@ -45,9 +58,11 @@ class Ofd2PdfApp:
 
         self._log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self._worker: threading.Thread | None = None
+        self._pending_files: list[Path] | None = None  # drag & drop multi-file list
 
         self._build_ui()
         self._refresh_backends()
+        self._setup_dnd()
         root.after(120, self._poll_queue)
 
     # ------------------------------------------------------------------ UI
@@ -71,6 +86,8 @@ class Ofd2PdfApp:
         ttk.Label(row2, text="输出位置：", width=12).pack(side="left")
         ttk.Entry(row2, textvariable=self.output_var).pack(side="left", fill="x", expand=True)
         ttk.Button(row2, text="浏览…", command=self._pick_output).pack(side="left", padx=(6, 0))
+        self.out_hint = ttk.Label(row2, text="留空则输出到 OFD 原目录", foreground="#888888")
+        self.out_hint.pack(side="left", padx=8)
 
         # Backend row
         row3 = ttk.Frame(frame)
@@ -82,6 +99,18 @@ class Ofd2PdfApp:
         self.backend_combo.pack(side="left")
         self.backend_hint = ttk.Label(row3, text="", foreground="#666666")
         self.backend_hint.pack(side="left", padx=8)
+
+        # Drop zone hint
+        row_hint = ttk.Frame(frame)
+        row_hint.pack(fill="x", **pad)
+        self.dnd_hint = ttk.Label(
+            row_hint,
+            text="",
+            foreground="#2f6f4f",
+            anchor="center",
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        self.dnd_hint.pack(fill="x")
 
         # Action row
         row4 = ttk.Frame(frame)
@@ -97,12 +126,67 @@ class Ofd2PdfApp:
         self.log = scrolledtext.ScrolledText(log_frame, height=14, state="disabled", wrap="word")
         self.log.pack(fill="both", expand=True)
 
+    def _setup_dnd(self) -> None:
+        """Register the whole window as a drag & drop target (if available)."""
+        if TkinterDnD is None:
+            self.dnd_hint["text"] = "提示：未安装 tkinterdnd2，无法拖拽。请用「选择文件/目录」按钮。"
+            return
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind("<<Drop>>", self._on_drop)
+        self.dnd_hint["text"] = "⇩ 直接把 OFD 文件 / 文件夹拖到这里（可多选）⇩"
+
+    # ------------------------------------------------------- drag & drop
+    def _on_drop(self, event: object) -> None:
+        """Handle files/folders dropped onto the window."""
+        try:
+            raw = self.root.tk.splitlist(getattr(event, "data", ""))
+            paths = [Path(p) for p in raw if p]
+        except Exception:  # pragma: no cover
+            self._append_log("无法解析拖入的文件。", "warn")
+            return
+
+        files: list[Path] = []
+        dirs: list[Path] = []
+        for p in paths:
+            try:
+                if p.is_dir():
+                    dirs.append(p)
+                elif p.suffix.lower() == ".ofd":
+                    files.append(p)
+            except OSError:
+                continue
+
+        if dirs and not files:
+            d = dirs[0]
+            self._pending_files = None
+            self.input_var.set(str(d))
+            self.output_var.set(str(d))
+            self._append_log(f"已载入目录：{d}", "info")
+            return
+        if not files:
+            self._append_log("未识别到 .ofd 文件，请拖入 OFD 文件或包含 OFD 的目录。", "warn")
+            return
+
+        if len(files) == 1:
+            self._pending_files = None
+            f = files[0]
+            self.input_var.set(str(f))
+            self.output_var.set(str(f.with_suffix(".pdf")))
+            self._append_log(f"已载入文件：{f}", "info")
+        else:
+            self._pending_files = files
+            self.input_var.set(f"已选择 {len(files)} 个 OFD 文件（输出到各自原目录）")
+            self.output_var.set("")
+            self._append_log(f"已载入 {len(files)} 个 OFD 文件，将逐个输出到源文件同目录。", "info")
+
+    # ------------------------------------------------------- pickers
     def _pick_input_file(self) -> None:
         path = filedialog.askopenfilename(
             title="选择 OFD 文件",
             filetypes=[("OFD 文档", "*.ofd"), ("所有文件", "*.*")],
         )
         if path:
+            self._pending_files = None
             self.input_var.set(path)
             if not self.output_var.get():
                 self.output_var.set(str(Path(path).with_suffix(".pdf")))
@@ -110,6 +194,7 @@ class Ofd2PdfApp:
     def _pick_input_dir(self) -> None:
         path = filedialog.askdirectory(title="选择包含 OFD 文件的目录")
         if path:
+            self._pending_files = None
             self.input_var.set(path)
 
     def _pick_output(self) -> None:
@@ -144,21 +229,32 @@ class Ofd2PdfApp:
         if self._worker and self._worker.is_alive():
             return
 
-        src = self.input_var.get().strip()
-        dst = self.output_var.get().strip()
         backend = self.backend_var.get()
 
-        if not src:
-            messagebox.showwarning("提示", "请先选择输入 OFD 文件或目录。")
-            return
-        if not dst:
-            messagebox.showwarning("提示", "请选择输出位置。")
+        if self._pending_files:
+            self.convert_btn.config(state="disabled")
+            self._append_log(f"== 开始批量转换 {len(self._pending_files)} 个文件（后端：{backend}） ==")
+            self._worker = threading.Thread(
+                target=self._convert_worker, args=(None, None, backend), daemon=True
+            )
+            self._worker.start()
             return
 
+        src = self.input_var.get().strip()
+        dst = self.output_var.get().strip()
+
+        if not src:
+            messagebox.showwarning("提示", "请先选择/拖入 OFD 文件或目录。")
+            return
         src_path = Path(src)
         if not src_path.exists():
             messagebox.showerror("错误", f"输入路径不存在：\n{src}")
             return
+        # 目录模式未指定输出时，默认输出到源目录（与 OFD 文件同目录）
+        if src_path.is_dir() and not dst:
+            dst = str(src_path)
+        if src_path.is_file() and not dst:
+            dst = str(src_path.with_suffix(".pdf"))
 
         self.convert_btn.config(state="disabled")
         self._append_log(f"== 开始转换（后端：{backend}） ==")
@@ -167,16 +263,35 @@ class Ofd2PdfApp:
         )
         self._worker.start()
 
-    def _convert_worker(self, src: Path, dst: Path, backend: str) -> None:
+    def _convert_worker(self, src: Path | None, dst: Path | None, backend: str) -> None:
         try:
-            if src.is_dir():
-                self._convert_dir(src, dst, backend)
-            else:
-                self._convert_one(src, dst, backend)
+            if self._pending_files:
+                self._convert_files(list(self._pending_files), backend)
+            elif src and src.is_dir():
+                self._convert_dir(src, dst or src, backend)
+            elif src:
+                self._convert_one(src, dst or src.with_suffix(".pdf"), backend)
             self._log_queue.put(("ok", "转换完成。"))
         except Exception as exc:  # noqa: BLE001 - surface everything to the user
             self._log_queue.put(("error", f"转换失败：{exc}"))
             self._log_queue.put(("detail", traceback.format_exc()))
+        finally:
+            self._pending_files = None
+
+    def _convert_files(self, files: list[Path], backend: str) -> None:
+        """Convert a list of files; each PDF lands next to its source OFD."""
+        ok = 0
+        total = len(files)
+        for idx, f in enumerate(files, 1):
+            out = f.with_suffix(".pdf")
+            self._log_queue.put(("info", f"[{idx}/{total}] {f.name} -> {out.name}"))
+            try:
+                convert_file(f, out, backend=backend)
+                ok += 1
+                self._log_queue.put(("ok", f"  done {f.name}"))
+            except Exception as exc:  # noqa: BLE001
+                self._log_queue.put(("error", f"  fail {f.name}: {exc}"))
+        self._log_queue.put(("info", f"批量完成：成功 {ok}/{total}。"))
 
     def _convert_dir(self, src: Path, dst: Path, backend: str) -> None:
         dst.mkdir(parents=True, exist_ok=True)
@@ -250,7 +365,10 @@ def main() -> int:
 
         return cli_main(sys.argv[1:])
 
-    root = tk.Tk()
+    if TkinterDnD is None:  # pragma: no cover - tkinterdnd2 missing
+        root = tk.Tk()
+    else:
+        root = TkinterDnD.Tk()
     app = Ofd2PdfApp(root)
 
     app.log.tag_configure("ok", foreground="#1a7f37")

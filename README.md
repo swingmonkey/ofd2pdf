@@ -8,6 +8,8 @@ OFD（GB/T 33190，国标版式文档）转 PDF 的命令行工具，支持可�
 - **命令行 + Python API**：单文件、批量目录转换。
 - **进度显示**：批量转换时显示进度。
 - **修复 easyofd 字体缩放**：对 `easyofd` 的 `TextObject` CTM 变换做补丁，使字号随变换矩阵一致缩放，显著改善复杂表格、附件标题的重影/错位。如个别文档需回退到原始行为，可设环境变量 `OFD2PDF_DISABLE_CTM_PATCH=1` 关闭该补丁。
+- **修复 WPS 表格线超出页面**：对 `easyofd` 的 `PathObject` 做补丁——保留其 CTM 并应用到路径坐标（WPS 生成的 OFD 路径坐标为 pt 单位，需经 CTM 换算成 mm），避免横向/竖向表格页的内容被放大出页面导致「表格显示不全」。
+- **图形界面支持拖拽**：Windows GUI 可直接把多个 OFD 文件或文件夹拖进窗口批量转换，每个 PDF 默认输出到源 OFD 同目录、同名（`xxx.ofd` → `xxx.pdf`）。
 - ** MIT 协议**：代码可自由使用。
 
 ## 后端对比
@@ -90,8 +92,8 @@ build_exe.bat
 或手动：
 
 ```bash
-# 1. 安装依赖（需 64 位 Python 3.9+）
-py -3.13 -m pip install easyofd pymupdf pyinstaller
+# 1. 安装依赖（需 64 位 Python 3.9+；tkinterdnd2 用于 GUI 拖拽）
+py -3.13 -m pip install easyofd pymupdf pyinstaller tkinterdnd2
 
 # 2. 打包
 py -3.13 -m PyInstaller ofd2pdf.spec --noconfirm
@@ -101,7 +103,9 @@ py -3.13 -m PyInstaller ofd2pdf.spec --noconfirm
 
 用法：
 
-- **双击运行**：打开图形界面，选择 OFD 文件或目录、选择输出位置、选择后端后点「开始转换」。
+- **双击运行**：打开图形界面，可直接把 OFD 文件或文件夹**拖进窗口**（支持多选），
+  或点「选择文件/目录」；选择后端后点「开始转换」。默认每个 OFD 输出到
+  **源文件同目录**、同名 `.pdf`（`输入.ofd` → `输入.pdf`），无需手动指定输出路径。
 - **命令行调用**：同一个 exe 也支持传参，等价于 `ofd2pdf` CLI（便于脚本批量调用）：
 
   ```bat
@@ -121,6 +125,7 @@ py -3.13 -m PyInstaller ofd2pdf.spec --noconfirm
 - `easyofd` 后端：
   - 封面、正文页：文字清晰、排版正确。
   - 统计附表页（附件 11-1、12-1、12-2）：**经 CTM 字号缩放补丁后**，标题与表格内容排版正确，无重影/错位。
+  - **横向/竖向表格页**（2026 年 1 月航班考核指标通报，20 页含 A4 横竖混排表格）：**经 PathObject CTM 补丁后**，表格线完整、不再超出页面被裁剪，横页按横向、竖页按竖向输出。
 - `taurusxin` 后端（需自行下载 EXE）：对该类表格排版通常更稳定。
 - `ofdrw` 后端（需 Java）：版式还原度最高。
 
